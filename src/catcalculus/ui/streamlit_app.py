@@ -5,6 +5,7 @@ from catcalculus.core.engine import GameEngine, EngineStatus
 from catcalculus.core.coordinates import WorldBounds, CoordinateSystem
 from catcalculus.terrain.generator import Terrain
 from catcalculus.terrain import functions
+from catcalculus.core.movement import move_cat_by_gradient
 
 
 def _get_engine() -> GameEngine:

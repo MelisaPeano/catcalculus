@@ -7,6 +7,8 @@ from enum import Enum, auto
 from typing import Callable, Optional
 
 from catcalculus.core.state import GameState
+from catcalculus.core.movement import move_cat_by_gradient
+
 
 
 class EngineStatus(Enum):
@@ -97,11 +99,17 @@ class GameEngine:
 
     def _update_logic(self, dt: float) -> None:
         """
-        Hook de lógica. Se completa en Epic 3.
-        Ejemplo futuro:
-        - mover gatos hacia gradiente descendiente
-        - aplicar energía
-        - detectar eventos
+        Hook de lógica. Aquí movemos gatitos por gradiente.
         """
-        # Por ahora, pasa.
-        pass
+        # seguridad: si no hay terreno o no hay gatos, no hacemos nada
+        if not self.state.cats or self.state.terrain is None:
+            return
+
+        # mover cada gato según gradiente
+        for cat in self.state.cats:
+            move_cat_by_gradient(
+                cat,
+                self.state.terrain,
+                step=dt,
+                uphill=False
+            )
