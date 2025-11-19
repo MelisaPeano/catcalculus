@@ -6,6 +6,7 @@ from typing import List, Optional
 from catcalculus.core.coordinates import CoordinateSystem, WorldBounds
 from catcalculus.terrain.generator import Terrain
 from catcalculus.cats.models import Cat
+from catcalculus.cats.shapes import CatShape
 
 
 @dataclass
@@ -16,14 +17,14 @@ class GameState:
     terrain: Terrain
     coordinate_system: CoordinateSystem
     cats: List[Cat] = field(default_factory=list)
-    mode: str = "engineer"  # más adelante: Enum o Literal["engineer", "challenge"]
-    time: float = 0.0       # tiempo lógico del juego, en segundos
+    mode: str = "engineer"
+    time: float = 0.0
 
     @classmethod
     def initial_state(
-        cls,
-        terrain: Optional[Terrain] = None,
-        cats: Optional[List[Cat]] = None,
+            cls,
+            terrain: Optional[Terrain] = None,
+            cats: Optional[List[Cat]] = None,
     ) -> "GameState":
         """
         Crea un estado inicial razonable: terreno y dos gatitos.
@@ -43,9 +44,20 @@ class GameState:
         )
 
         if cats is None:
+            # Gatitos iniciales con forma definida
             cats = [
-                Cat(name="Euler"),
-                Cat(name="Gauss"),
+                Cat(
+                    name="Euler",
+                    x=0.0,
+                    y=0.0,
+                    shape=CatShape(width=0.5, height=0.5)
+                ),
+                Cat(
+                    name="Gauss",
+                    x=1.0,
+                    y=1.0,
+                    shape=CatShape(width=0.5, height=0.5)
+                ),
             ]
 
         return cls(
