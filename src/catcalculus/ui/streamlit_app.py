@@ -1,4 +1,3 @@
-
 import streamlit as st
 import matplotlib.pyplot as plt
 
@@ -63,7 +62,7 @@ def _render_terrain_3d(terrain: Terrain) -> None:
 def main():
     st.set_page_config(page_title="Catcalculus", layout="wide")
 
-    st.title("😼 Catcalculus – Vista inicial de la montaña")
+    st.title("😼 Catculus – Vista inicial de la montaña")
 
     engine = _get_engine()
 
@@ -113,17 +112,16 @@ def main():
         if engine.state.cats:
             st.subheader("Gatitos")
             for cat in engine.state.cats:
-                st.write(
-                    f"- {cat.name}: energía={cat.energy:.1f}, "
-                    f"posición=({cat.x:.2f}, {cat.y:.2f})"
-                )
+                with st.container(border=True):
+                    st.markdown(f"### 🐱 {cat.name}")
+                    st.write(f"**Energía:** {cat.energy:.1f}")
+                    st.write(f"**Posición:** ({cat.x:.2f}, {cat.y:.2f})")
         else:
-            st.info("Todavía no hay gatitos en el estado (Epic 4 se encargará de eso).")
+            st.info("Todavía no hay gatitos en el estado.")
 
     with col_plot:
         st.subheader("Terreno 3D")
         _render_terrain_3d(engine.state.terrain)
-
 
 if __name__ == "__main__":
     main()
