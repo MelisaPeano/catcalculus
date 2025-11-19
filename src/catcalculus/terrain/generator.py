@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Callable, Tuple
 import numpy as np
@@ -25,7 +26,11 @@ class Terrain:
             name: str = "custom",
     ) -> "Terrain":
         """
-        Crea un terreno a partir de una función f(x, y).
+        Crea un terreno a partir de una función escalar f(x, y).
+
+        Requisitos de `func`:
+        - Debe aceptar dos np.ndarray (X, Y) con la misma forma.
+        - Debe devolver un np.ndarray Z de la misma forma que X e Y.
         """
         x = np.linspace(*x_range, resolution)
         y = np.linspace(*y_range, resolution)
@@ -33,10 +38,22 @@ class Terrain:
 
         try:
             Z = func(X, Y)
-            if Z.shape != X.shape:
-                raise ValueError(f"La función debe devolver un array del mismo tamaño que X,Y. Obtenido: {Z.shape}, esperado: {X.shape}")
         except Exception as e:
-            raise ValueError(f"Error al evaluar la función: {e}")
+            raise ValueError(f"Error al evaluar la función de terreno: {e}")
+
+        if not isinstance(Z, np.ndarray):
+            raise TypeError(
+                f"La función debe devolver un np.ndarray, se obtuvo: {type(Z)}"
+            )
+
+        if Z.shape != X.shape:
+            raise ValueError(
+                f"La función debe devolver un array del mismo tamaño que X,Y. "
+                f"Obtenido: {Z.shape}, esperado: {X.shape}"
+            )
+
+        if not np.all(np.isfinite(Z)):
+            raise ValueError("La superficie contiene valores no finitos (NaN o inf).")
 
         return cls(
             x=X,
@@ -45,7 +62,7 @@ class Terrain:
             name=name,
             x_range=x_range,
             y_range=y_range,
-            resolution=resolution
+            resolution=resolution,
         )
 
     @classmethod

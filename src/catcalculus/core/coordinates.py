@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Tuple
 
+
 @dataclass(frozen=True)
 class WorldBounds:
     """
@@ -21,6 +22,7 @@ class WorldBounds:
     def height(self) -> float:
         return self.y_max - self.y_min
 
+
 @dataclass
 class CoordinateSystem:
     """
@@ -36,13 +38,13 @@ class CoordinateSystem:
     grid_shape: Tuple[int, int]  # (rows, cols)
 
     def __post_init__(self) -> None:
-        self.rows = self.grid_shape[0]   # filas
-        self.cols = self.grid_shape[1]   # columnas
+        # filas y columnas
+        self.rows: int = self.grid_shape[0]
+        self.cols: int = self.grid_shape[1]
 
         # Tamaño de cada celda en el mundo continuo
-        self.dx = self.world_bounds.width() / max(1, (self.cols - 1))
-        self.dy = self.world_bounds.height() / max(1, (self.rows - 1))
-
+        self.dx: float = self.world_bounds.width() / max(1, (self.cols - 1))
+        self.dy: float = self.world_bounds.height() / max(1, (self.rows - 1))
 
     def clamp_world(self, x: float, y: float) -> Tuple[float, float]:
         """
@@ -60,17 +62,18 @@ class CoordinateSystem:
         i -> índice de fila (eje y)
         j -> índice de columna (eje x)
         """
-
         x, y = self.clamp_world(x, y)
-
         xb = self.world_bounds
 
+        # Normalizar a [0, 1]
         nx = (x - xb.x_min) / xb.width()
         ny = (y - xb.y_min) / xb.height()
 
+        # Escalar a índices de 0 a N-1
         j = int(round(nx * (self.cols - 1)))
         i = int(round(ny * (self.rows - 1)))
 
+        # Clamp por seguridad
         i = max(0, min(self.rows - 1, i))
         j = max(0, min(self.cols - 1, j))
         return i, j
@@ -78,9 +81,8 @@ class CoordinateSystem:
     def grid_to_world(self, i: int, j: int) -> Tuple[float, float]:
         """
         Convierte índices de grilla (i, j) a coordenadas continuas (x, y),
-        apuntando al centro de la celda.
+        apuntando al centro aproximado de la celda.
         """
-
         i = max(0, min(self.rows - 1, i))
         j = max(0, min(self.cols - 1, j))
 
