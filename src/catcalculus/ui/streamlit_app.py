@@ -1,5 +1,6 @@
 import streamlit as st
 import matplotlib.pyplot as plt
+import numpy as np
 
 from catcalculus.core.engine import GameEngine, EngineStatus
 from catcalculus.core.coordinates import WorldBounds, CoordinateSystem
@@ -45,17 +46,88 @@ def _apply_selected_terrain(engine: GameEngine, level_name: str) -> None:
     engine.state.time = 0.0  # reseteamos tiempo lógico al cambiar de mapa
 
 
-def _render_terrain_3d(terrain: Terrain) -> None:
+def _find_global_minimum(terrain: Terrain) -> dict[str, float]:
+    """
+    Encuentra el punto de mínimo global del terreno.
+    """
+    idx = np.argmin(terrain.z)
+    i, j = np.unravel_index(idx, terrain.z.shape)
+    x = float(terrain.x[i, j])
+    y = float(terrain.y[i, j])
+    z = float(terrain.z[i, j])
+    return {"x": x, "y": y, "z": z, "i": int(i), "j": int(j)}
+
+
+def _render_terrain_3d(terrain: Terrain, highlight_point: dict[str, float] | None = None) -> None:
     """
     Dibuja la superficie del terreno en 3D usando matplotlib y la muestra en Streamlit.
     """
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
-    ax.plot_surface(terrain.x, terrain.y, terrain.z, linewidth=0, antialiased=True)
+    ax.plot_surface(
+        terrain.x,
+        terrain.y,
+        terrain.z,
+        cmap="terrain",
+        linewidth=0,
+        antialiased=True,
+    )
+
+    if highlight_point:
+        ax.scatter(
+            highlight_point["x"],
+            highlight_point["y"],
+            highlight_point["z"],
+            color="red",
+            s=40,
+            label="Punto crítico",
+        )
+        ax.legend(loc="upper left")
+
     ax.set_title(terrain.name)
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     ax.set_zlabel("f(x,y)")
+    ax.view_init(elev=30, azim=135)
+    fig.tight_layout()
+
+    st.pyplot(fig)
+
+
+def _render_terrain_contours(
+    terrain: Terrain,
+    levels: int = 15,
+    highlight_point: dict[str, float] | None = None,
+) -> None:
+    """
+    Dibuja curvas de nivel del terreno en 2D usando matplotlib y las muestra en Streamlit.
+    """
+    fig, ax = plt.subplots()
+    contours = ax.contour(
+        terrain.x,
+        terrain.y,
+        terrain.z,
+        levels=levels,
+        cmap="pink",
+    )
+    ax.clabel(contours, inline=True, fontsize=8, fmt="%.2f")
+
+    if highlight_point:
+        ax.scatter(
+            highlight_point["x"],
+            highlight_point["y"],
+            color="red",
+            s=30,
+            marker="x",
+            label="Punto crítico",
+        )
+        ax.legend(loc="upper right")
+
+    ax.set_title(f"Curvas de nivel - {terrain.name}")
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_aspect("equal", adjustable="box")
+    fig.tight_layout()
 
     st.pyplot(fig)
 
@@ -78,6 +150,12 @@ def main():
 
     if st.sidebar.button("Aplicar terreno"):
         _apply_selected_terrain(engine, level_name)
+
+    challenge_active = st.sidebar.checkbox(
+        "Activar desafío (punto crítico)",
+        value=st.session_state.get("challenge_active", False),
+    )
+    st.session_state.challenge_active = challenge_active
 
     st.sidebar.markdown("---")
 
@@ -110,6 +188,15 @@ def main():
         st.write(f"- Dimensiones grilla: {engine.state.terrain.z.shape}")
         st.write(f"- Modo: `{engine.state.mode}`")
 
+        critical_point = None
+        if challenge_active:
+            critical_point = _find_global_minimum(engine.state.terrain)
+            st.subheader("Punto crítico (mínimo global)")
+            st.write(
+                f"({critical_point['x']:.2f}, {critical_point['y']:.2f}) | "
+                f"altitud: {critical_point['z']:.2f}"
+            )
+
         if engine.state.cats:
             st.subheader("Gatitos")
             for cat in engine.state.cats:
@@ -122,7 +209,9 @@ def main():
 
     with col_plot:
         st.subheader("Terreno 3D")
-        _render_terrain_3d(engine.state.terrain)
+        _render_terrain_3d(engine.state.terrain, critical_point)
+        st.subheader("Curvas de nivel")
+        _render_terrain_contours(engine.state.terrain, highlight_point=critical_point)
 
 if __name__ == "__main__":
     main()
