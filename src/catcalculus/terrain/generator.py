@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Tuple
 import numpy as np
+
+from ..core.math_tools import numeric_gradient, ScalarField2D
 from catcalculus.terrain import functions
 
 
@@ -12,16 +14,17 @@ class Terrain:
     y: np.ndarray
     z: np.ndarray
     name: str
-    x_range: Tuple[float, float] = (-3.0, 3.0)
-    y_range: Tuple[float, float] = (-3.0, 3.0)
+    func: Callable[[np.ndarray, np.ndarray], np.ndarray]
+    x_range: Tuple[float, float] = (-4.0, 4.0)
+    y_range: Tuple[float, float] = (-4.0, 4.0)
     resolution: int = 100
 
     @classmethod
     def from_function(
             cls,
             func: Callable[[np.ndarray, np.ndarray], np.ndarray],
-            x_range: Tuple[float, float] = (-3.0, 3.0),
-            y_range: Tuple[float, float] = (-3.0, 3.0),
+            x_range: Tuple[float, float] = (-4.0, 4.0),
+            y_range: Tuple[float, float] = (-4.0, 4.0),
             resolution: int = 100,
             name: str = "custom",
     ) -> "Terrain":
@@ -60,6 +63,7 @@ class Terrain:
             y=Y,
             z=Z,
             name=name,
+            func=func,
             x_range=x_range,
             y_range=y_range,
             resolution=resolution,
@@ -71,3 +75,35 @@ class Terrain:
         Terreno por defecto (Prado suave).
         """
         return cls.from_function(functions.meadow, name="Prado suave")
+
+    def get_slice_2d(self, y_val: float) -> Tuple[np.ndarray, np.ndarray]:
+        """Obtiene el perfil 2D a lo largo de un valor y_val específico."""
+        # Encuentra la fila (índice i) más cercana al valor y_val
+        y_vals = self.y[:, 0]
+        i_slice = np.argmin(np.abs(y_vals - y_val))
+
+        x_profile = self.x[i_slice, :]
+        z_profile = self.z[i_slice, :]
+
+        return x_profile, z_profile
+
+    def f(self, x, y):
+        if self.func:
+            return self.func(np.array(x), np.array(y)).item()
+        return 0.0
+
+    def fx(self, x: float, y: float) -> float:
+        """Componente X del gradiente (df/dx) en un punto (x, y)."""
+        if not self.func:
+            return 0.0
+
+        gx, _ = numeric_gradient(self.func, np.array(x), np.array(y))
+        return gx.item()
+
+    def fy(self, x: float, y: float) -> float:
+        """Componente Y del gradiente (df/dy) en un punto (x, y)."""
+        if not self.func:
+            return 0.0
+
+        _, gy = numeric_gradient(self.func, np.array(x), np.array(y))
+        return gy.item()
