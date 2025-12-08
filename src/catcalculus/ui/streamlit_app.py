@@ -34,6 +34,9 @@ if "terrain_index" not in st.session_state:
 if "max_z_reached" not in st.session_state:
     st.session_state.max_z_reached = -float('inf') # Inicializar con un valor muy bajo
 
+if "last_dir_cosine" not in st.session_state:
+    st.session_state.last_dir_cosine = None
+
 engine = st.session_state.engine
 state = st.session_state.game_state
 engine.state = state
@@ -364,6 +367,11 @@ else:
         min_val = axis_values.min()
         max_val = axis_values.max()
 
+        # Derivadas y gradiente en la posición actual
+        dfdx, dfdy = engine.gradient_at(cat.x, cat.y)
+        slope = dfdx if slice_axis == 'x' else dfdy
+        grad_norm = np.sqrt(dfdx**2 + dfdy**2)
+
         # Plotear la función
         fig.add_trace(go.Scatter(
             x=axis_values,
@@ -388,6 +396,39 @@ else:
             marker=dict(size=1, color='red'),
         ))
 
+        # Recta tangente (refuerzo de derivada)
+        tangent_x = np.array([min_val, max_val])
+        tangent_y = slope * (tangent_x - cat_coord_to_plot) + cat_z
+        fig.add_trace(go.Scatter(
+            x=tangent_x,
+            y=tangent_y,
+            mode='lines',
+            name='Recta tangente',
+            line=dict(color='red', width=2, dash='dash')
+        ))
+
+        # Área bajo la curva hasta la posición del gato (refuerzo de integral)
+        mask = axis_values <= cat_coord_to_plot if axis_values[0] < axis_values[-1] else axis_values >= cat_coord_to_plot
+        area_x = axis_values[mask]
+        area_z = z_values[mask]
+
+        # Aseguramos incluir el punto del gato
+        if len(area_x) == 0 or area_x[-1] != cat_coord_to_plot:
+            area_x = np.append(area_x, cat_coord_to_plot)
+            area_z = np.append(area_z, cat_z)
+
+        fig.add_trace(go.Scatter(
+            x=area_x,
+            y=area_z,
+            mode='lines',
+            name='Área recorrida',
+            fill='tozeroy',
+            fillcolor='rgba(52, 152, 219, 0.25)',
+            line=dict(color='rgba(52, 152, 219, 0.6)', width=2)
+        ))
+
+        area_under_curve = float(np.trapz(area_z, area_x)) if len(area_x) > 1 else 0.0
+
         # Actualizar diseño y límites
         fig.update_xaxes(
             title_text=axis_label,
@@ -406,6 +447,15 @@ else:
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='#f0f2f6'
         )
+
+        direction_cosine = st.session_state.last_dir_cosine
+        info = {
+            "slope": float(slope),
+            "grad_norm": float(grad_norm),
+            "dir_cosine": None if direction_cosine is None else float(direction_cosine),
+            "integral": area_under_curve,
+            "axis_label": axis_label.split()[-1],
+        }
 
         # Lógica de "Llegada a la cima"
         MAX_Z_TERRAIN = z_values.max()
@@ -426,10 +476,20 @@ else:
             st.markdown(f"**Altura Máxima Alcanzada:** {current_max_z:.2f} / {MAX_Z_TERRAIN:.2f}")
 
 
-        return fig
+        return fig, info
 
     # Mostrar el nuevo gráfico de corte 2D
-    st.plotly_chart(plot_slice_2d(terrain, st.session_state.player, SLICE_AXIS, SLICE_COORD), use_container_width=True)
+    fig_slice, hud_info = plot_slice_2d(terrain, st.session_state.player, SLICE_AXIS, SLICE_COORD)
+    st.plotly_chart(fig_slice, use_container_width=True)
+
+    # HUD de lectura rápida (más amigable que el texto plano)
+    c_slope, c_grad, c_cos, c_int = st.columns(4)
+    axis_label_short = hud_info["axis_label"]
+    c_slope.metric(f"Pendiente ({axis_label_short})", f"{hud_info['slope']:.2f}")
+    c_grad.metric("|∇f|", f"{hud_info['grad_norm']:.2f}")
+    cos_text = f"{hud_info['dir_cosine']:.2f}" if hud_info["dir_cosine"] is not None else "—"
+    c_cos.metric("cos(∇, mov)", cos_text)
+    c_int.metric("∫ hasta aquí", f"{hud_info['integral']:.2f}")
 
     st.subheader("Movimiento del gato")
 
@@ -443,7 +503,6 @@ else:
     # Función de movimiento general
     def handle_move(dx, dy):
         if st.session_state.get("goal_reached", False):
-            st.rerun()
             return
 
         # Calcular la posición y altura actual (Z_old)
@@ -469,7 +528,6 @@ else:
                 energy_change = -cost_up
             else:
                 st.session_state.last_game_message = f"🥵 ¡Necesitas {cost_up} energía para subir aquí! (Pendiente: {gradient_magnitude:.2f})"
-                st.rerun()
                 return # No movemos si intenta subir sin energía
         else:
             # Bajando o moviéndose lateralmente/descansando: Recarga
@@ -486,7 +544,15 @@ else:
         if z_new > st.session_state.max_z_reached:
             st.session_state.max_z_reached = z_new
 
-        st.rerun()
+        # Guardar la dirección relativa al gradiente (coseno) para mostrarla en el HUD
+        grad_vec = engine.gradient_at(old_x, old_y)
+        grad_norm = np.linalg.norm(grad_vec)
+        move_vec = np.array([dx, dy])
+        move_norm = np.linalg.norm(move_vec)
+        if grad_norm > 0 and move_norm > 0:
+            st.session_state.last_dir_cosine = float(np.dot(grad_vec, move_vec) / (grad_norm * move_norm))
+        else:
+            st.session_state.last_dir_cosine = None
 
 
     # Arriba / Abajo
