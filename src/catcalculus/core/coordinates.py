@@ -26,7 +26,7 @@ class WorldBounds:
 @dataclass
 class CoordinateSystem:
     """
-    Sistema de coordenadas que sabe convertir entre:
+    Sistema que convierte entre:
 
     - Mundo continuo (x, y)
     - Grilla discreta (i, j) de tamaño (rows, cols)
@@ -37,13 +37,14 @@ class CoordinateSystem:
     world_bounds: WorldBounds
     grid_shape: Tuple[int, int]  # (rows, cols)
 
-    @property
-    def rows(self) -> int:
-        return self.grid_shape[0]
+    def __post_init__(self) -> None:
+        # filas y columnas
+        self.rows: int = self.grid_shape[0]
+        self.cols: int = self.grid_shape[1]
 
-    @property
-    def cols(self) -> int:
-        return self.grid_shape[1]
+        # Tamaño de cada celda en el mundo continuo
+        self.dx: float = self.world_bounds.width() / max(1, (self.cols - 1))
+        self.dy: float = self.world_bounds.height() / max(1, (self.rows - 1))
 
     def clamp_world(self, x: float, y: float) -> Tuple[float, float]:
         """
@@ -72,25 +73,22 @@ class CoordinateSystem:
         j = int(round(nx * (self.cols - 1)))
         i = int(round(ny * (self.rows - 1)))
 
-        # Seguridad por si round se pasa un poquito
+        # Clamp por seguridad
         i = max(0, min(self.rows - 1, i))
         j = max(0, min(self.cols - 1, j))
         return i, j
 
     def grid_to_world(self, i: int, j: int) -> Tuple[float, float]:
         """
-        Convierte índices de grilla (i, j) a coordenadas continuas (x, y)
-        apuntando aproximadamente al centro de la celda.
+        Convierte índices de grilla (i, j) a coordenadas continuas (x, y),
+        apuntando al centro aproximado de la celda.
         """
         i = max(0, min(self.rows - 1, i))
         j = max(0, min(self.cols - 1, j))
 
         xb = self.world_bounds
 
-        nx = j / max(1, (self.cols - 1))
-        ny = i / max(1, (self.rows - 1))
-
-        x = xb.x_min + nx * xb.width()
-        y = xb.y_min + ny * xb.height()
+        x = xb.x_min + j * self.dx
+        y = xb.y_min + i * self.dy
 
         return x, y

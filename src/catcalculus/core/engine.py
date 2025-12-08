@@ -1,11 +1,12 @@
-# src/catcalculus/core/engine.py
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Callable, Optional
 
-from catcalculus.core.state import GameState
+from .state import GameState
+from .movement import move_cat_by_gradient
+from catcalculus.cats.models import Cat
 
 
 class EngineStatus(Enum):
@@ -16,119 +17,97 @@ class EngineStatus(Enum):
 
 @dataclass
 class EngineConfig:
-    """
-    Configuración básica del engine.
-
-    tick_rate: frecuencia lógica de actualización (ej. 30 FPS -> 1/30 s).
-    max_time_step: paso máximo permitido por update, para evitar saltos bruscos.
-    """
-    tick_rate: float = 1.0 / 30.0
-    max_time_step: float = 0.1  # 100 ms
+    tick_rate: float = 1 / 5
+    max_time_step: float = 0.1
+    stop_threshold: float = 1e-2
 
 
 class GameEngine:
-    """
-    Núcleo del juego.
 
-    Se encarga de:
-    - Mantener el GameState
-    - Avanzar el tiempo lógico con step(dt)
-    - Gestionar inicio, pausa y reinicio
-    - Notificar cambios a un callback opcional (para UI/render)
-    """
+    def __init__(self,
+                 initial_state: Optional[GameState] = None,
+                 config: Optional[EngineConfig] = None):
 
-    def __init__(
-        self,
-        initial_state: Optional[GameState] = None,
-        config: Optional[EngineConfig] = None,
-    ) -> None:
+        self.state = initial_state or GameState.initial_state()
         self.config = config or EngineConfig()
-        self.state: GameState = initial_state or GameState.initial_state()
-        self.status: EngineStatus = EngineStatus.STOPPED
+        self.status = EngineStatus.STOPPED
 
-        # Callback opcional que puede usar la UI para “escuchar” cambios
-        # firma: on_state_updated(engine: GameEngine) -> None
         self.on_state_updated: Optional[Callable[[GameEngine], None]] = None
 
-    # ---------------------------
-    # Gestión de ciclo de vida
-    # ---------------------------
-
-    def start(self, reset: bool = True) -> None:
-        """
-        Inicia el juego. Si reset=True, reinicia el estado a valores iniciales.
-        """
+    # -----------------------------
+    # Control
+    # -----------------------------
+    def start(self, reset=True):
         if reset:
             self.state = GameState.initial_state(
                 terrain=self.state.terrain,
                 cats=self.state.cats,
+                reset_cats=True
             )
         self.status = EngineStatus.RUNNING
 
-    def pause(self) -> None:
-        """Pone el juego en pausa (no avanza el tiempo lógico)."""
+    def pause(self):
         if self.status == EngineStatus.RUNNING:
             self.status = EngineStatus.PAUSED
 
-    def resume(self) -> None:
-        """Reanuda el juego desde PAUSED."""
+    def resume(self):
         if self.status == EngineStatus.PAUSED:
             self.status = EngineStatus.RUNNING
 
-    def stop(self) -> None:
-        """Detiene el juego completamente."""
+    def stop(self):
         self.status = EngineStatus.STOPPED
 
-    def toggle_pause(self) -> None:
-        """Conveniencia para alternar entre RUNNING y PAUSED."""
-        if self.status == EngineStatus.RUNNING:
-            self.pause()
-        elif self.status == EngineStatus.PAUSED:
-            self.resume()
+    # -----------------------------
+    # Main loop
+    # -----------------------------
+    def step(self, dt=None):
+        manual = dt is None
+        if manual:
+            dt = 0.1
 
-    # ---------------------------
-    # Bucle de actualización
-    # ---------------------------
-
-    def step(self, dt: float | None = None) -> None:
-        """
-        Avanza el estado del juego dt segundos lógicos.
-
-        Si dt es None, usa el tick_rate de configuración.
-        No hace nada si el engine no está en RUNNING.
-        """
-        if self.status != EngineStatus.RUNNING:
+        if self.status != EngineStatus.RUNNING and not manual:
             return
 
-        if dt is None:
-            dt = self.config.tick_rate
-
-        # Limitar dt para evitar saltos gigantes
         dt = min(dt, self.config.max_time_step)
-
-        # 1) Actualizar tiempo global
         self.state.time += dt
 
-        # 2) Actualizar lógica del juego (gatos, eventos, etc.)
         self._update_logic(dt)
 
-        # 3) Notificar a la UI (si hay callback)
-        if self.on_state_updated is not None:
+        if self.on_state_updated:
             self.on_state_updated(self)
 
-    # ---------------------------
-    # Lógica interna (placeholder por ahora)
-    # ---------------------------
+    # -----------------------------
+    # Logic
+    # -----------------------------
+    def _update_logic(self, dt):
+        terrain = self.state.terrain
+        if not terrain or not self.state.cats:
+            return
 
-    def _update_logic(self, dt: float) -> None:
-        """
-        Lógica de actualización del mundo.
+        for cat in self.state.cats:
+            self._move_cat(cat, dt)
 
-        Por ahora, dejamos el hook vacío para Epic 4 (gatitos) y Epic 2/3.
-        Acá más adelante:
-        - mover gatos según gradiente
-        - aplicar consumo de energía
-        - manejar eventos
-        """
-        # TODO: implementar cuando esté Epic 2 y 4
-        pass
+    def _move_cat(self, cat: Cat, dt):
+        if cat.is_at_minimum:
+            return
+
+        mag = move_cat_by_gradient(
+            cat,
+            self.state.terrain,
+            self.state.coordinate_system,
+            step_factor=1.0,
+            uphill=False
+        )
+
+        if mag is not None and mag < self.config.stop_threshold:
+            cat.is_at_minimum = True
+        else:
+            cat.is_at_minimum = False
+
+    def gradient_at(self, x, y):
+        terrain = self.state.terrain
+
+        if not terrain:
+            return (0, 0)
+
+        return terrain.fx(x, y), terrain.fy(x, y)
